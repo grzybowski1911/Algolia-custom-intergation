@@ -21,7 +21,10 @@ require_once __DIR__ . '/algolia_index_cron.php';
 add_action('init', 'algolia_init');
 add_filter('get_algolia_index_name', 'get_algolia_index_name');
 add_filter('update_records', 'update_records', 10, 2);
+add_filter('delete_records', 'delete_records', 10, 2);
+
 add_action('save_post', 'algolia_save_post', 10, 3);
+
 
 /**
  * Initialize Algolia PHP search client
@@ -62,17 +65,24 @@ function get_algolia_index_name($name = '') {
  * @param array $records Algolia records to update
  */
 function update_records($index_name = 'global_search', $records) {
+    error_log('created: ' . $records[0]['title']);
     global $algolia;
 
     $canonical_index_name = apply_filters('get_algolia_index_name', $index_name);
     $index = $algolia->initIndex($canonical_index_name);
 
-    // Delete all records using the distinct_key attribute
-    $filter_to_delete = 'distinct_key:'.$records[0]['distinct_key'];
-    // Make sure to delete split records if they exist
-    $index->deleteBy(['filters' => $filter_to_delete]);
-    // Then save
     $index->saveObjects($records);
+}
+
+function delete_records($index_name = 'global_search', $records) {
+    error_log('deleted: ' . $records[0]['title']);
+    global $algolia;
+
+    $canonical_index_name = apply_filters('get_algolia_index_name', $index_name);
+    $index = $algolia->initIndex($canonical_index_name);
+    
+    $index->deleteObject($records[0]['objectID']);
+    //$index->saveObject($record);
 }
 
 /**
@@ -117,7 +127,8 @@ function algolia_save_post($id, $post, $update) {
     if (!$records) {
         return $post;
     }
-    $records = (array) $records;
+
+    //$records = (array) $records;
 
     if ($post_status == 'publish') {
         // Update record(s) in global index
@@ -127,6 +138,11 @@ function algolia_save_post($id, $post, $update) {
         if ($post_type == 'faculty' || $post_type == 'student' || $post_type == 'person') {
             apply_filters('update_records', 'people_search', $records);
         }
+    }
+
+    if ($post_status == 'trash') {
+        error_log('post status trash');
+        apply_filters('delete_records', 'global_search', $records);
     }
 
     return $post;
